@@ -1,23 +1,7 @@
 "use client";
 import React, { useState, useEffect } from 'react';
 import LearningPathDashboard from './components/LearningPathFlowchart';
-
-interface LearningPath {
-  id: string;
-  title: string;
-  chapters: Chapter[];
-}
-
-interface Chapter {
-  id: string;
-  title: string;
-  subChapters: SubChapter[];
-}
-
-interface SubChapter {
-  id: string;
-  title: string;
-}
+import { LearningPath } from '../../types/types';
 
 export default function MyLearningPathPage() {
   const [learningPaths, setLearningPaths] = useState<LearningPath[]>([]);
@@ -50,18 +34,10 @@ export default function MyLearningPathPage() {
   }
 
   return (
-    <div className="bg-black text-white min-h-screen">
+    <div className="bg-white text-white min-h-screen">
       <div className="container mx-auto p-4">
-        <select
-          value={selectedPathId || ''}
-          onChange={(e) => setSelectedPathId(e.target.value)}
-          className="mb-4 p-2 border rounded bg-gray-800 text-white"
-        >
-          {learningPaths.map(path => (
-            <option key={path.id} value={path.id}>{path.title}</option>
-          ))}
-        </select>
-        {selectedPath && <LearningPathDashboard learningPath={selectedPath} />}
+
+        {selectedPath && <LearningPathDashboard />}
       </div>
     </div>
   );

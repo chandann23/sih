@@ -1,30 +1,39 @@
-import React, { useState } from 'react';
-import { FaYoutube, FaFileAlt, FaCode, FaStickyNote, FaStar } from 'react-icons/fa';
+"use client";
+import React, { useState, useEffect } from 'react';
+import { FaStar, FaChevronDown, FaChevronUp } from 'react-icons/fa';
 import { Table, TableHeader, TableRow, TableHead, TableBody, TableCell } from '~/components/ui/table';
-interface SubChapter {
-  id: string;
-  title: string;
-  completed: boolean;
-  hasArticle: boolean;
-  hasVideo: boolean;
-  hasPractice: boolean;
-  difficulty: 'Easy' | 'Medium' | 'Hard';
-}
+import { Card, CardHeader, CardContent } from '~/components/ui/card';
+import { Progress } from '~/components/ui/progress';
+import { Badge } from '~/components/ui/badge';
+import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from '~/components/ui/select';
+import { LearningPath, Chapter } from '~/types/types';
 
-interface Chapter {
-  id: string;
-  title: string;
-  subChapters: SubChapter[];
-}
-
-interface LearningPath {
-  id: string;
-  title: string;
-  chapters: Chapter[];
-}
-
-const LearningPathDashboard: React.FC<{ learningPath: LearningPath }> = ({ learningPath }) => {
+const LearningPathDashboard: React.FC = () => {
+  const [learningPaths, setLearningPaths] = useState<LearningPath[]>([]);
+  const [selectedPathId, setSelectedPathId] = useState<string | null>(null);
   const [expandedChapters, setExpandedChapters] = useState<string[]>([]);
+
+  useEffect(() => {
+    // Fetch all learning paths when the component mounts
+    const fetchLearningPaths = async () => {
+      try {
+        const response = await fetch('/api/learning-paths');
+        if (response.ok) {
+          const paths = await response.json();
+          setLearningPaths(paths);
+          if (paths.length > 0) {
+            setSelectedPathId(paths[0].id);
+          }
+        } else {
+          console.error('Failed to fetch learning paths');
+        }
+      } catch (error) {
+        console.error('Error fetching learning paths:', error);
+      }
+    };
+
+    fetchLearningPaths();
+  }, []);
 
   const toggleChapter = (chapterId: string) => {
     setExpandedChapters((prev) =>
@@ -32,95 +41,158 @@ const LearningPathDashboard: React.FC<{ learningPath: LearningPath }> = ({ learn
     );
   };
 
-  const totalSubChapters = learningPath.chapters.flatMap((c) => c.subChapters).length;
-  const completedSubChapters = learningPath.chapters
+  const handleCheckboxChange = async (chapterId: string, subChapterId: string, currentStatus: boolean) => {
+    const updatedStatus = !currentStatus;
+
+    // Optimistically update the UI
+    setLearningPaths((prevPaths) => {
+      return prevPaths.map((path) => {
+        if (path.id === selectedPathId) {
+          return {
+            ...path,
+            chapters: path.chapters.map((chapter) => {
+              if (chapter.id === chapterId) {
+                return {
+                  ...chapter,
+                  subChapters: chapter.subChapters.map((subChapter) => {
+                    if (subChapter.id === subChapterId) {
+                      return { ...subChapter, completed: updatedStatus };
+                    }
+                    return subChapter;
+                  }),
+                };
+              }
+              return chapter;
+            }),
+          };
+        }
+        return path;
+      });
+    });
+
+    // Update the database
+    try {
+      await fetch(`/api/sub-chapters/${subChapterId}`, {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ completed: updatedStatus }),
+      });
+    } catch (error) {
+      console.error('Failed to update the subchapter:', error);
+    }
+  };
+
+  const selectedPath = learningPaths.find(path => path.id === selectedPathId);
+
+  if (!selectedPath) {
+    return <div>Loading...</div>;
+  }
+
+  const totalSubChapters = selectedPath.chapters.flatMap((c) => c.subChapters).length;
+  const completedSubChapters = selectedPath.chapters
     .flatMap((c) => c.subChapters)
     .filter((sc) => sc.completed).length;
   const progressPercentage = Math.round((completedSubChapters / totalSubChapters) * 100);
 
   return (
     <div className="min-h-screen bg-white p-8">
-      <div className="max-w-4xl mx-auto shadow-md rounded-lg bg-gray-50">
-        <div className="bg-white p-6 border-b border-gray-200 rounded-t-lg">
-          <h1 className="text-2xl font-semibold text-gray-800 mb-2">{learningPath.title}</h1>
-          <div className="flex items-center justify-between">
-            <div className="text-sm text-gray-600">Your Progress: {completedSubChapters}/{totalSubChapters}</div>
-            <div className="text-sm text-gray-600">{progressPercentage}% complete</div>
-          </div>
-          <div className="w-full bg-gray-300 rounded-full h-2 mt-4">
-            <div className="bg-red-600 h-2 rounded-full" style={{ width: `${progressPercentage}%` }}></div>
-          </div>
-        </div>
-        {learningPath.chapters.map((chapter, index) => (
-          <div key={chapter.id} className="border-b border-gray-200">
-            <div
-              className="flex justify-between items-center cursor-pointer p-4 bg-white hover:bg-gray-100"
-              onClick={() => toggleChapter(chapter.id)}
+      <Card className="max-w-4xl mx-auto">
+        <CardHeader className="bg-gradient-to-r from-purple-500 to-pink-500 text-white rounded-t-lg p-6">
+          <div className="flex justify-between items-center mb-4">
+            <h1 className="text-3xl font-bold">Learning Path Dashboard</h1>
+            <Select
+              value={selectedPathId || ''}
+              onValueChange={(value) => setSelectedPathId(value)}
             >
-              <h2 className="text-lg font-medium text-gray-700">Step {index + 1}: {chapter.title}</h2>
-              <span className="text-sm text-gray-600">{chapter.subChapters.filter((sc) => sc.completed).length}/{chapter.subChapters.length}</span>
-            </div>
-            {expandedChapters.includes(chapter.id) && (
-              <div className="bg-white p-4">
-                <Table className="w-full text-sm">
-                  <TableHeader>
-                    <TableRow className="text-gray-500">
-                      <TableHead className="text-left p-2">Status</TableHead>
-                      <TableHead className="text-left p-2">Problem</TableHead>
-                      <TableHead className="text-center p-2">Article</TableHead>
-                      <TableHead className="text-center p-2">YouTube</TableHead>
-                      <TableHead className="text-center p-2">Practice</TableHead>
-                      <TableHead className="text-center p-2">Note</TableHead>
-                      <TableHead className="text-center p-2">Difficulty</TableHead>
-                      <TableHead className="text-center p-2">Revision</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {chapter.subChapters.map((subChapter) => (
-                      <TableRow key={subChapter.id} className="border-t border-gray-200">
-                        <TableCell className="p-2">
-                          <input
-                            type="checkbox"
-                            checked={subChapter.completed}
-                            onChange={() => {/* Handle completion */ }}
-                            className="w-4 h-4"
-                          />
-                        </TableCell>
-                        <TableCell className="p-2 text-gray-800">{subChapter.title}</TableCell>
-                        <TableCell className="text-center p-2">
-                          {subChapter.hasArticle && <FaFileAlt className="inline text-gray-700" />}
-                        </TableCell>
-                        <TableCell className="text-center p-2">
-                          {subChapter.hasVideo && <FaYoutube className="inline text-red-600" />}
-                        </TableCell>
-                        <TableCell className="text-center p-2">
-                          <FaCode className="inline text-green-500" />
-                        </TableCell>
-                        <TableCell className="text-center p-2">
-                          <FaStickyNote className="inline text-yellow-500" />
-                        </TableCell>
-                        <TableCell className="text-center p-2">
-                          <span className={`px-2 py-1 rounded ${subChapter.difficulty === 'Easy' ? 'bg-green-100 text-green-800' :
-                            subChapter.difficulty === 'Medium' ? 'bg-yellow-100 text-yellow-800' : 'bg-red-100 text-red-800'
-                            }`}>
-                            {subChapter.difficulty}
-                          </span>
-                        </TableCell>
-                        <TableCell className="text-center p-2">
-                          <FaStar className="inline text-yellow-500" />
-                        </TableCell>
-                      </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
-              </div>
-            )}
+              <SelectTrigger className="w-[200px] bg-white text-black">
+                <SelectValue placeholder="Select a learning path" />
+              </SelectTrigger>
+              <SelectContent>
+                {learningPaths.map((path) => (
+                  <SelectItem key={path.id} value={path.id}>{path.title}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
           </div>
-        ))}
-      </div>
+          <h2 className="text-2xl font-semibold mb-2">{selectedPath.title}</h2>
+          <div className="flex items-center justify-between">
+            <div className="text-sm">Progress: {completedSubChapters}/{totalSubChapters}</div>
+            <div className="text-sm font-semibold">{progressPercentage}% complete</div>
+          </div>
+          <Progress
+            value={progressPercentage}
+            className="mt-4 bg-white/20 [--progress-indicator-color:white]"
+          />
+        </CardHeader>
+        <CardContent className="p-6">
+          {selectedPath.chapters.map((chapter, index) => (
+            <div key={chapter.id} className="mb-4 bg-white rounded-lg shadow-md overflow-hidden">
+              <div
+                className="flex justify-between items-center cursor-pointer p-4 bg-gray-50 hover:bg-gray-100 transition-colors duration-150"
+                onClick={() => toggleChapter(chapter.id)}
+              >
+                <h2 className="text-lg font-semibold text-gray-800">
+                  Step {index + 1}: {chapter.title}
+                </h2>
+                <div className="flex items-center">
+                  <span className="text-sm text-gray-600 mr-4">
+                    {chapter.subChapters.filter((sc) => sc.completed).length}/{chapter.subChapters.length}
+                  </span>
+                  {expandedChapters.includes(chapter.id) ? (
+                    <FaChevronUp className="text-gray-500" />
+                  ) : (
+                    <FaChevronDown className="text-gray-500" />
+                  )}
+                </div>
+              </div>
+              {expandedChapters.includes(chapter.id) && (
+                <div className="p-4">
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead className="w-16">Status</TableHead>
+                        <TableHead>Problem</TableHead>
+                        <TableHead className="w-24 text-center">Difficulty</TableHead>
+                        <TableHead className="w-24 text-center">Revision</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {chapter.subChapters.map((subChapter) => (
+                        <TableRow key={subChapter.id}>
+                          <TableCell>
+                            <input
+                              type="checkbox"
+                              checked={subChapter.completed}
+                              onChange={() => handleCheckboxChange(chapter.id, subChapter.id, subChapter.completed)}
+                              className="w-5 h-5 rounded border-gray-300 text-indigo-600 focus:ring-indigo-500"
+                            />
+                          </TableCell>
+                          <TableCell className="font-medium">{subChapter.title}</TableCell>
+                          <TableCell className="text-center">
+                            <Badge
+                              variant={subChapter.difficulty === 'Easy' ? 'success' :
+                                subChapter.difficulty === 'Medium' ? 'warning' : 'destructive'}
+                            >
+                              {subChapter.difficulty}
+                            </Badge>
+                          </TableCell>
+                          <TableCell className="text-center">
+                            <FaStar className="inline text-yellow-400" />
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </div>
+              )}
+            </div>
+          ))}
+        </CardContent>
+      </Card>
     </div>
   );
 };
 
 export default LearningPathDashboard;
-
